@@ -21,6 +21,8 @@
  */
 
 #include <linux/gfp.h>
+#include <linux/dma-mapping.h>
+#include <linux/slab.h>
 #include <asm/unaligned.h>
 
 #include "xhci.h"
@@ -28,6 +30,16 @@
 #define	PORT_WAKE_BITS	(PORT_WKOC_E | PORT_WKDISC_E | PORT_WKCONN_E)
 #define	PORT_RWC_BITS	(PORT_CSC | PORT_PEC | PORT_WRC | PORT_OCC | \
 			 PORT_RC | PORT_PLC | PORT_PE)
+
+/* 31:28 for port testing in xHCI */
+#ifdef CONFIG_HOST_COMPLIANT_TEST
+#define PORT_TEST(x)		(((x) & 0xf) << 28)     /* Port Test Control */
+#define PORT_TEST_J		PORT_TEST(0x1)
+#define PORT_TEST_K		PORT_TEST(0x2)
+#define PORT_TEST_SE0_NAK	PORT_TEST(0x3)
+#define PORT_TEST_PKT		PORT_TEST(0x4)
+#define PORT_TEST_FORCE		PORT_TEST(0x5)
+#endif
 
 /* usb 1.1 root hub device descriptor */
 static u8 usb_bos_descriptor [] = {
@@ -339,6 +351,8 @@ static void xhci_disable_port(struct usb_hcd *hcd, struct xhci_hcd *xhci,
 		xhci_dbg(xhci, "Ignoring request to disable "
 				"SuperSpeed port.\n");
 		return;
+	} else if (hcd->speed == HCD_USB2) {
+		xhci_dbg(xhci, "request to disable High-Speed port.\n");
 	}
 
 	/* Write 1 to disable the port */
@@ -389,6 +403,9 @@ static void xhci_clear_port_change_bit(struct xhci_hcd *xhci, u16 wValue,
 	}
 	/* Change bits are all write 1 to clear */
 	xhci_writel(xhci, port_status | status, addr);
+	/* Race Condition in PORTSC Write Followed by Read */
+	if (xhci->quirks & XHCI_PORTSC_RACE_CONDITION)
+		udelay(1);
 	port_status = xhci_readl(xhci, addr);
 	xhci_dbg(xhci, "clear port %s change, actual port %d status  = 0x%x\n",
 			port_change_bit, wIndex, port_status);
@@ -405,6 +422,22 @@ static int xhci_get_ports(struct usb_hcd *hcd, __le32 __iomem ***port_array)
 	} else {
 		max_ports = xhci->num_usb2_ports;
 		*port_array = xhci->usb2_ports;
+	}
+
+	return max_ports;
+}
+
+static int xhci_get_portpmsc(struct usb_hcd *hcd, __le32 __iomem ***port_array)
+{
+	int max_ports;
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+
+	if (hcd->speed == HCD_USB3) {
+		max_ports = xhci->num_usb3_ports;
+		*port_array = xhci->usb3_portpmsc;
+	} else {
+		max_ports = xhci->num_usb2_ports;
+		*port_array = xhci->usb2_portpmsc;
 	}
 
 	return max_ports;
@@ -541,17 +574,20 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		u16 wIndex, char *buf, u16 wLength)
 {
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
-	int max_ports;
+	int max_ports, max_portpmsc;
 	unsigned long flags;
 	u32 temp, status;
 	int retval = 0;
 	__le32 __iomem **port_array;
+	__le32 __iomem **portpmsc_array;
 	int slot_id;
 	struct xhci_bus_state *bus_state;
 	u16 link_state = 0;
 	u16 wake_mask = 0;
+	u8 selector;
 
 	max_ports = xhci_get_ports(hcd, &port_array);
+	max_portpmsc = xhci_get_portpmsc(hcd, &portpmsc_array);
 	bus_state = &xhci->bus_state[hcd_index(hcd)];
 
 	spin_lock_irqsave(&xhci->lock, flags);
@@ -695,6 +731,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		put_unaligned(cpu_to_le32(status), (__le32 *) buf);
 		break;
 	case SetPortFeature:
+		selector = wIndex >> 8;
 		if (wValue == USB_PORT_FEAT_LINK_STATE)
 			link_state = (wIndex & 0xff00) >> 3;
 		if (wValue == USB_PORT_FEAT_REMOTE_WAKE_MASK)
@@ -723,7 +760,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			}
 			/* In spec software should not attempt to suspend
 			 * a port unless the port reports that it is in the
-			 * enabled (PED = ‘1’,PLS < ‘3’) state.
+			 * enabled (PED = ??1??,PLS < ??3??) state.
 			 */
 			temp = xhci_readl(xhci, port_array[wIndex]);
 			if ((temp & PORT_PE) == 0 || (temp & PORT_RESET)
@@ -835,6 +872,23 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 
 			temp = xhci_readl(xhci, port_array[wIndex]);
 			xhci_dbg(xhci, "set port reset, actual port %d status  = 0x%x\n", wIndex, temp);
+			break;
+
+		/*
+		 * For downstream facing ports (these):  one hub port is put
+		 * into test mode according to USB2 11.24.2.13, then the hub
+		 * must be reset (which for root hub now means rmmod+modprobe,
+		 * or else system reboot).  See EHCI 2.3.9 and 4.14 for info
+		 * about the EHCI-specific stuff.
+		 */
+		case USB_PORT_FEAT_TEST:
+#ifdef CONFIG_HOST_COMPLIANT_TEST
+			retval = xhci_port_test(hcd, selector, wIndex, flags);
+			if (retval < 0) {
+				xhci_err(xhci, "USB2 Host Test Fail!!!\n");
+				goto error;
+			}
+#endif
 			break;
 		case USB_PORT_FEAT_REMOTE_WAKE_MASK:
 			xhci_set_remote_wake_mask(xhci, port_array,

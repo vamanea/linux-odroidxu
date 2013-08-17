@@ -1519,9 +1519,13 @@ struct xhci_hcd {
 	u8			*port_array;
 	/* Array of pointers to USB 3.0 PORTSC registers */
 	__le32 __iomem		**usb3_ports;
+	/* Array of pointers to USB 3.0 PORTPMSC registers */
+	__le32 __iomem		**usb3_portpmsc;
 	unsigned int		num_usb3_ports;
 	/* Array of pointers to USB 2.0 PORTSC registers */
 	__le32 __iomem		**usb2_ports;
+	/* Array of pointers to USB 2.0 PORTPMSC registers */
+	__le32 __iomem		**usb2_portpmsc;
 	unsigned int		num_usb2_ports;
 	/* support xHCI 0.96 spec USB2 software LPM */
 	unsigned		sw_lpm_support:1;
@@ -1699,6 +1703,9 @@ void xhci_free_command(struct xhci_hcd *xhci,
 /* xHCI PCI glue */
 int xhci_register_pci(void);
 void xhci_unregister_pci(void);
+#elif defined(CONFIG_USB_XHCI_EXYNOS)
+int xhci_register_exynos(void);
+void xhci_unregister_exynos(void);
 #else
 static inline int xhci_register_pci(void) { return 0; }
 static inline void xhci_unregister_pci(void) {}
@@ -1842,4 +1849,11 @@ struct xhci_input_control_ctx *xhci_get_input_control_ctx(struct xhci_hcd *xhci,
 struct xhci_slot_ctx *xhci_get_slot_ctx(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx);
 struct xhci_ep_ctx *xhci_get_ep_ctx(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx, unsigned int ep_index);
 
+#ifdef CONFIG_HOST_COMPLIANT_TEST
+int xhci_urb_enqueue_single_step(struct usb_hcd *hcd,
+		struct urb *urb, gfp_t mem_flags, int get_dev_desc);
+int xhci_queue_ctrl_tx_single_step(struct xhci_hcd *xhci,
+		gfp_t mem_flags, struct urb *urb, int slot_id,
+		unsigned int ep_index, int get_dev_desc);
+#endif
 #endif /* __LINUX_XHCI_HCD_H */
