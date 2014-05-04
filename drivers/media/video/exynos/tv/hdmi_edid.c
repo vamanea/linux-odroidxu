@@ -35,6 +35,8 @@
 #define EDID_3D_TB		6
 #define EDID_3D_SBS		8
 
+#define pr_info printk
+
 static struct i2c_client *edid_client;
 
 /* Structure for Checking 3D Mandatory Format in EDID */

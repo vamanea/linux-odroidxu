@@ -680,11 +680,11 @@ static void hdmi_hpd_changed(struct hdmi_device *hdev, int state)
 
 	if (state) {
 		// we don't need to update, since data is static.
-/*		ret = edid_update(hdev);
+		ret = edid_update(hdev);
 		if (ret == -ENODEV) {
 			dev_err(hdev->dev, "failed to update edid\n");
 			return;
-		} */ 
+		}
 
 		preset = hdmi_get_v4l2_dv_id();
 
@@ -711,8 +711,8 @@ static void hdmi_hpd_work(struct work_struct *work)
 {
 	struct hdmi_device *hdev = container_of(work, struct hdmi_device,
 						hpd_work);
-
-	hdmi_hpd_changed(hdev, 0);
+	int state = s5p_v4l2_hpd_read_gpio();
+	hdmi_hpd_changed(hdev, state);
 }
 
 static void hdmiphy_poweroff_work(struct work_struct *work)

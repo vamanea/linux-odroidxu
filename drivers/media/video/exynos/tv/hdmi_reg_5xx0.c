@@ -2265,6 +2265,7 @@ irqreturn_t hdmi_irq_handler(int irq, void *dev_data)
 		if (intc_flag & HDMI_INTC_FLAG_HPD_PLUG) {
 			hdmi_write_mask(hdev, HDMI_INTC_FLAG_0, ~0,
 					HDMI_INTC_FLAG_HPD_PLUG);
+			queue_work(system_nrt_wq, &hdev->hpd_work);
 		}
 
 		if (intc_flag & HDMI_INTC_FLAG_HDCP) {
