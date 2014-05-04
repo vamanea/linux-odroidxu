@@ -119,7 +119,7 @@ static ssize_t s5p_cec_read(struct file *file, char __user *buffer,
 	ssize_t retval;
 	unsigned long spin_flags;
 
-	if (wait_event_interruptible_timeout(cec_tx_struct.waitq,
+	if (wait_event_interruptible_timeout(cec_rx_struct.waitq,
 		atomic_read(&cec_rx_struct.state) == STATE_DONE,
 		msecs_to_jiffies(TVOUT_TIMEOUT)) == 0) {
 		printk(KERN_ERR "error : waiting for interrupt is timeout\n");
