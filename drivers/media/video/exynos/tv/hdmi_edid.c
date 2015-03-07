@@ -110,6 +110,7 @@ static u32 preferred_preset = HDMI_DEFAULT_PRESET;
 static u32 edid_misc;
 static int max_audio_channels;
 static u32 source_phy_addr = 0;
+module_param_named(source_phy_addr, source_phy_addr, uint, 0644);
 
 static int edid_i2c_read(struct hdmi_device *hdev, u8 segment, u8 offset,
 						   u8 *buf, size_t len)
@@ -424,7 +425,7 @@ int edid_update(struct hdmi_device *hdev)
 		preset = edid_find_preset(&specs.modedb[i]);
 		if (preset) {
 			if (preset->supported == false) {
-				pr_info("EDID: found %s", preset->name);
+				pr_info("EDID: found %s\n", preset->name);
 				preset->supported = true;
 			}
 			if (first) {
@@ -439,7 +440,7 @@ int edid_update(struct hdmi_device *hdev)
 		edid_extension_update(&specs);
 
 	edid_misc = specs.misc;
-	pr_info("EDID: misc flags %08x", edid_misc);
+	pr_info("EDID: misc flags %08x\n", edid_misc);
 
 	for (i = 0; i < specs.audiodb_len; i++) {
 		if (specs.audiodb[i].format != FB_AUDIO_LPCM)
@@ -456,7 +457,8 @@ int edid_update(struct hdmi_device *hdev)
 	} else {
 		max_audio_channels = 0;
 	}
-	pr_info("EDID: Audio channels %d", max_audio_channels);
+	pr_info("EDID: Audio channels %d\n", max_audio_channels);
+	pr_info("EDID: HDMI phys address = %u\n", source_phy_addr);
 
 	fb_destroy_modedb(specs.modedb);
 	fb_destroy_audiodb(specs.audiodb);
