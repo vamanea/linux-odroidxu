@@ -433,7 +433,7 @@ static int i2s_set_sysclk(struct snd_soc_dai *dai,
 		if (dir == SND_SOC_CLOCK_IN)
 			freq = 0;
 
-		if ((rfs && other && other->rfs && (other->rfs != rfs)) ||
+		if ((freq && other && other->rfs && (other->rfs != freq)) ||
 				(any_active(i2s) &&
 				(((dir == SND_SOC_CLOCK_IN)
 					&& !(mod & MOD_CDCLKCON)) ||

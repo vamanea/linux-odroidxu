@@ -1448,7 +1448,6 @@ config ARM_ERRATA_774769
 	  The workaround is to configure write streaming on versions of A15
 	  affected by this erratum such that no streaming-write ever allocates
 	  into the L2 cache.
->>>>>>> Initial Kernel for ODROID-XU patchset
 
 endmenu
 

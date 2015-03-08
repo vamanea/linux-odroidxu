@@ -677,19 +677,12 @@ void xhci_shutdown(struct usb_hcd *hcd)
 
 	spin_lock_irq(&xhci->lock);
 	xhci_halt(xhci);
-	/* Workaround for spurious wakeups at shutdown with HSW */
-	if (xhci->quirks & XHCI_SPURIOUS_WAKEUP)
-		xhci_reset(xhci);
 	spin_unlock_irq(&xhci->lock);
 
 	xhci_cleanup_msix(xhci);
 
 	xhci_dbg(xhci, "xhci_shutdown completed - status = %x\n",
 		    xhci_readl(xhci, &xhci->op_regs->status));
-
-	/* Yet another workaround for spurious wakeups at shutdown with HSW */
-	if (xhci->quirks & XHCI_SPURIOUS_WAKEUP)
-		pci_set_power_state(to_pci_dev(hcd->self.controller), PCI_D3hot);
 }
 
 #ifdef CONFIG_PM
@@ -811,9 +804,6 @@ int xhci_suspend(struct xhci_hcd *xhci)
 	command &= ~CMD_RUN;
 	xhci_writel(xhci, command, &xhci->op_regs->command);
 
-	/* Some chips from Fresco Logic need an extraordinary delay */
-	delay *= (xhci->quirks & XHCI_SLOW_SUSPEND) ? 10 : 1;
-
 	if (handshake(xhci, &xhci->op_regs->status,
 		      STS_HALT, STS_HALT, delay)) {
 		xhci_warn(xhci, "WARN: xHC CMD_RUN timeout\n");
@@ -893,12 +883,6 @@ int xhci_resume(struct xhci_hcd *xhci, bool hibernated)
 
 	/* If restore operation fails, re-initialize the HC during resume */
 	if ((temp & STS_SRE) || hibernated) {
-
-		if ((xhci->quirks & XHCI_COMP_MODE_QUIRK) &&
-				!(xhci_all_ports_seen_u0(xhci))) {
-			del_timer_sync(&xhci->comp_mode_recovery_timer);
-			xhci_dbg(xhci, "Compliance Mode Recovery Timer deleted!\n");
-		}
 
 		/* Let the USB core know _both_ roothubs lost power. */
 		usb_root_hub_lost_power(xhci->main_hcd->self.root_hub);
@@ -985,7 +969,6 @@ int xhci_resume(struct xhci_hcd *xhci, bool hibernated)
 	return retval;
 }
 #endif	/* CONFIG_PM */
-}
 
 /*-------------------------------------------------------------------------*/
 
