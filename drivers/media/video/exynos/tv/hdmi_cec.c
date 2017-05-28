@@ -182,7 +182,8 @@ static ssize_t s5p_cec_write(struct file *file, const char __user *buffer,
 		atomic_read(&cec_tx_struct.state) != STATE_TX,
 		msecs_to_jiffies(TVOUT_TIMEOUT)) == 0) {
 		printk(KERN_ERR "error : waiting for interrupt is timeout\n");
-		return -ERESTARTSYS;
+		//return -ERESTARTSYS;
+		return -1;
 	}
 
 	if (atomic_read(&cec_tx_struct.state) == STATE_ERROR)
